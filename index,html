@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horarios Sala Andes - GIIA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* gray-900 */
+            color: #d1d5db; /* gray-300 */
+        }
+        .time-slot {
+            height: 20px;
+        }
+        /* Corrected Color Palette with better distinction */
+        .celula-capacitacion { background-color: #c4b5fd; border-color: #a78bfa; color: #5b21b6; } /* violet-300 */
+        .celula-infraestructura { background-color: #93c5fd; border-color: #60a5fa; color: #1e40af; } /* blue-300 */
+        .celula-difusion { background-color: #fcd34d; border-color: #fbbf24; color: #92400e; } /* NEW: amber-300 */
+        .celula-proyectos { background-color: #6ee7b7; border-color: #34d399; color: #065f46; } /* emerald-300 */
+        .celula-bloqueado { background-color: #4b5563; border-color: #6b7280; color: #e5e7eb; } /* gray-600 */
+
+        /* Custom scrollbar for dark theme */
+        .calendar-scroll::-webkit-scrollbar { width: 8px; }
+        .calendar-scroll::-webkit-scrollbar-track { background: #1f2937; border-radius: 10px; } /* gray-800 */
+        .calendar-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; } /* gray-600 */
+        .calendar-scroll::-webkit-scrollbar-thumb:hover { background: #6b7280; } /* gray-500 */
+
+        /* Dark mode for form elements */
+        .form-input-dark {
+            background-color: #374151; /* gray-700 */
+            border-color: #4b5563; /* gray-600 */
+            color: #f3f4f6; /* gray-100 */
+        }
+        .form-input-dark:focus {
+            --tw-ring-color: #60a5fa; /* blue-400 */
+            border-color: #60a5fa;
+        }
+        .form-checkbox-dark {
+            background-color: #374151;
+            border-color: #4b5563;
+        }
+        .form-checkbox-dark:checked {
+            background-color: #4f46e5; /* indigo-600 */
+        }
+    </style>
+</head>
+<body class="p-4 md:p-6">
+
+    <div id="app" class="max-w-7xl mx-auto">
+        <header class="text-center mb-8 flex items-center justify-center gap-4">
+            <svg width="48" height="48" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo GIIA">
+                <defs>
+                    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#a855f7;stop-opacity:1" />
+                        <stop offset="50%" style="stop-color:#ec4899;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                <path d="M 25 50 C 25 25, 75 25, 75 50 S 25 75, 25 50 Z" stroke="url(#logoGradient)" stroke-width="12" fill="none" stroke-linecap="round"/>
+            </svg>
+            <div>
+                <h1 class="text-3xl font-bold text-gray-100">Reservas Sala Andes</h1>
+                <p class="text-gray-400">Grupo de Interés en Inteligencia Artificial (GIIA)</p>
+            </div>
+        </header>
+
+        <!-- Modals and Overlays -->
+        <div id="loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-400"></div>
+        </div>
+        <div id="error-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 hidden">
+            <div class="bg-gray-800 border border-gray-700 rounded-lg shadow-xl p-6 w-11/12 md:w-1/3 text-center">
+                <h3 class="text-lg font-bold text-red-500 mb-4">Error</h3>
+                <p id="error-message" class="text-gray-300"></p>
+                <button onclick="document.getElementById('error-modal').classList.add('hidden')" class="mt-6 bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition">Cerrar</button>
+            </div>
+        </div>
+        <div id="confirm-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 hidden">
+            <div class="bg-gray-800 border border-gray-700 rounded-lg shadow-xl p-6 w-11/12 md:w-1/3 text-center">
+                <h3 class="text-lg font-semibold text-gray-100 mb-4">Confirmar Acción</h3>
+                <p id="confirm-message" class="text-gray-300"></p>
+                <div class="mt-6 flex justify-center gap-4">
+                    <button id="confirm-cancel-btn" class="bg-gray-600 text-gray-100 font-semibold py-2 px-6 rounded-lg hover:bg-gray-500 transition">Cancelar</button>
+                    <button id="confirm-ok-btn" class="bg-red-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-red-700 transition">Eliminar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="bg-gray-800 p-4 rounded-lg shadow-md border border-gray-700 flex flex-col">
+                <div>
+                    <h2 class="text-lg font-semibold mb-3 text-gray-100">Nueva Reserva</h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="celula" class="block text-sm font-medium text-gray-400">Célula</label>
+                            <select id="celula" class="mt-1 block w-full rounded-md shadow-sm form-input-dark focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                        </div>
+                        <div>
+                            <label for="booking-day" class="block text-sm font-medium text-gray-400">Día</label>
+                            <select id="booking-day" class="mt-1 block w-full rounded-md shadow-sm form-input-dark"></select>
+                        </div>
+                        <div>
+                            <label for="start-time" class="block text-sm font-medium text-gray-400">Hora Inicio</label>
+                            <select id="start-time" class="mt-1 block w-full rounded-md shadow-sm form-input-dark"></select>
+                        </div>
+                        <div>
+                            <label for="end-time" class="block text-sm font-medium text-gray-400">Hora Fin</label>
+                            <select id="end-time" class="mt-1 block w-full rounded-md shadow-sm form-input-dark"></select>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center">
+                        <input id="recurring" type="checkbox" class="h-4 w-4 rounded form-checkbox-dark text-indigo-600 focus:ring-indigo-500">
+                        <label for="recurring" class="ml-2 block text-sm text-gray-300">Repetir semanalmente</label>
+                    </div>
+                    <button id="add-booking" class="mt-4 w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition shadow-lg">
+                        Agregar Reserva
+                    </button>
+                </div>
+                <div class="mt-4 border-t border-gray-700 pt-3 flex-grow flex flex-col min-h-0">
+                    <h3 class="text-md font-semibold text-gray-300 mb-2">Reservas Recurrentes</h3>
+                    <div id="recurring-list" class="space-y-2 flex-grow overflow-y-auto calendar-scroll pr-2">
+                        <p class="text-gray-500 text-sm">No hay reservas recurrentes.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 p-4 rounded-lg shadow-md border border-gray-700 flex flex-col">
+                <div>
+                    <h2 class="text-lg font-semibold mb-3 text-gray-100">Bloqueo de Horario</h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="block-name" class="block text-sm font-medium text-gray-400">Nombre o Motivo</label>
+                            <input type="text" id="block-name" placeholder="Ej: Mantenimiento" class="mt-1 block w-full rounded-md shadow-sm form-input-dark">
+                        </div>
+                        <div>
+                            <label for="block-day" class="block text-sm font-medium text-gray-400">Día</label>
+                            <select id="block-day" class="mt-1 block w-full rounded-md shadow-sm form-input-dark"></select>
+                        </div>
+                        <div>
+                            <label for="block-start-time" class="block text-sm font-medium text-gray-400">Hora Inicio</label>
+                            <select id="block-start-time" class="mt-1 block w-full rounded-md shadow-sm form-input-dark"></select>
+                        </div>
+                        <div>
+                            <label for="block-end-time" class="block text-sm font-medium text-gray-400">Hora Fin</label>
+                            <select id="block-end-time" class="mt-1 block w-full rounded-md shadow-sm form-input-dark"></select>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center">
+                        <input id="block-recurring" type="checkbox" class="h-4 w-4 rounded form-checkbox-dark text-indigo-600 focus:ring-indigo-500">
+                        <label for="block-recurring" class="ml-2 block text-sm text-gray-300">Repetir semanalmente</label>
+                    </div>
+                    <button id="add-block" class="mt-4 w-full bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-500 transition">
+                        Agregar Bloqueo
+                    </button>
+                </div>
+                <div class="mt-4 border-t border-gray-700 pt-3 flex-grow flex flex-col min-h-0">
+                    <h3 class="text-md font-semibold text-gray-300 mb-2">Bloqueos Recurrentes</h3>
+                    <div id="blocks-list" class="space-y-2 flex-grow overflow-y-auto calendar-scroll pr-2 mb-2">
+                        <p class="text-gray-500 text-sm">No hay bloqueos recurrentes.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calendar Section -->
+        <div class="bg-gray-800 rounded-lg shadow-md border border-gray-700">
+            <div class="p-4 flex justify-between items-center border-b border-gray-700">
+                <button id="prev-week" class="p-2 rounded-md hover:bg-gray-700 transition">&larr; Semana Anterior</button>
+                <h2 id="week-display" class="text-lg font-semibold text-center text-gray-100"></h2>
+                <button id="next-week" class="p-2 rounded-md hover:bg-gray-700 transition">Semana Siguiente &rarr;</button>
+            </div>
+            
+            <div class="grid grid-cols-[auto_1fr]">
+                <div class="p-2"></div> 
+                <div id="day-headers" class="grid grid-cols-6">
+                </div>
+            </div>
+
+            <div id="calendar" class="grid grid-cols-[auto_1fr] h-[60vh] overflow-hidden">
+                <div id="time-labels" class="pr-2 text-right text-sm text-gray-400 overflow-y-auto calendar-scroll"></div>
+                <div id="schedule-grid-container" class="grid grid-cols-6 relative overflow-y-auto calendar-scroll">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- App State ---
+            let allBookings = [];
+            let recurringBookings = [];
+            let allBlocks = []; // Recurring blocks
+            let singleEventBlocks = []; // One-time blocks
+            let currentMonday = getStartOfWeek(new Date());
+
+            // --- UI Elements ---
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const weekDisplay = document.getElementById('week-display');
+            const timeLabelsContainer = document.getElementById('time-labels');
+            const scheduleGridContainer = document.getElementById('schedule-grid-container');
+            const dayHeadersContainer = document.getElementById('day-headers');
+            const blocksListContainer = document.getElementById('blocks-list');
+            const recurringListContainer = document.getElementById('recurring-list');
+
+            // --- Confirmation Modal ---
+            let confirmCallback = null;
+            const confirmModal = document.getElementById('confirm-modal');
+            const confirmMessage = document.getElementById('confirm-message');
+            const confirmOkBtn = document.getElementById('confirm-ok-btn');
+            const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+
+            function showConfirm(message, callback) {
+                confirmMessage.textContent = message;
+                confirmCallback = callback;
+                confirmModal.classList.remove('hidden');
+            }
+            
+            confirmOkBtn.addEventListener('click', () => {
+                if (confirmCallback) confirmCallback();
+                confirmModal.classList.add('hidden');
+                confirmCallback = null;
+            });
+
+            confirmCancelBtn.addEventListener('click', () => {
+                confirmModal.classList.add('hidden');
+                confirmCallback = null;
+            });
+
+            // --- Error Modal ---
+            function showError(message) {
+                document.getElementById('error-message').textContent = message;
+                document.getElementById('error-modal').classList.remove('hidden');
+            }
+
+            // --- Date & Time Utilities ---
+            const daysMap = { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado'};
+            const celulas = ['Capacitación', 'Infraestructura y Seguridad', 'Difusión', 'Proyectos'];
+            
+            function getStartOfWeek(date) {
+                const d = new Date(date);
+                const day = d.getDay(); 
+                if (day === 0) { // If today is Sunday, start from next Monday
+                    d.setDate(d.getDate() + 1);
+                } else { // Otherwise, go back to the most recent Monday
+                    const diff = d.getDate() - day + 1;
+                    d.setDate(diff);
+                }
+                d.setHours(0, 0, 0, 0);
+                return d;
+            }
+
+            function formatDate(date) {
+                return date.toISOString().split('T')[0];
+            }
+
+            function formatWeekDisplay(monday) {
+                const saturday = new Date(monday);
+                saturday.setDate(monday.getDate() + 5);
+
+                const mondayYear = monday.getFullYear();
+                const saturdayYear = saturday.getFullYear();
+
+                if (mondayYear !== saturdayYear) {
+                    const mondayOptions = { day: 'numeric', month: 'long', year: 'numeric' };
+                    const saturdayOptions = { day: 'numeric', month: 'long', year: 'numeric' };
+                    return `${monday.toLocaleDateString('es-ES', mondayOptions)} - ${saturday.toLocaleDateString('es-ES', saturdayOptions)}`;
+                } else {
+                    const mondayOptions = { day: 'numeric', month: 'long' };
+                    const saturdayOptions = { day: 'numeric', month: 'long' };
+                    return `${monday.toLocaleDateString('es-ES', mondayOptions)} - ${saturday.toLocaleDateString('es-ES', saturdayOptions)}, ${mondayYear}`;
+                }
+            }
+            
+            function timeToMinutes(time) {
+                const [hours, minutes] = time.split(':').map(Number);
+                return hours * 60 + minutes;
+            }
+            
+            function normalizeForClass(str) {
+                if (!str || typeof str !== 'string') return '';
+                return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(' ')[0].toLowerCase();
+            }
+
+            // --- Local Storage Logic ---
+            function loadData() {
+                allBookings = JSON.parse(localStorage.getItem('salaAndesBookings') || '[]');
+                recurringBookings = JSON.parse(localStorage.getItem('salaAndesRecurringBookings') || '[]');
+                allBlocks = JSON.parse(localStorage.getItem('salaAndesBlocks') || '[]');
+                singleEventBlocks = JSON.parse(localStorage.getItem('salaAndesSingleBlocks') || '[]');
+            }
+
+            function saveBookings() {
+                localStorage.setItem('salaAndesBookings', JSON.stringify(allBookings));
+            }
+
+            function saveRecurringBookings() {
+                localStorage.setItem('salaAndesRecurringBookings', JSON.stringify(recurringBookings));
+            }
+            
+            function saveBlocks() {
+                localStorage.setItem('salaAndesBlocks', JSON.stringify(allBlocks));
+            }
+
+            function saveSingleEventBlocks() {
+                localStorage.setItem('salaAndesSingleBlocks', JSON.stringify(singleEventBlocks));
+            }
+
+            // --- Initialization ---
+            function initFormOptions() {
+                const celulaSelect = document.getElementById('celula');
+                celulas.forEach(c => celulaSelect.add(new Option(c, c)));
+                
+                const daySelectors = ['#block-day', '#booking-day'];
+                daySelectors.forEach(selectorId => {
+                    const select = document.querySelector(selectorId);
+                    for(const [value, text] of Object.entries(daysMap)) {
+                        select.add(new Option(text, value));
+                    }
+                });
+            }
+            
+            function initTimePickers() {
+                const selectors = ['#start-time', '#end-time', '#block-start-time', '#block-end-time'];
+                selectors.forEach(selectorId => {
+                    const select = document.querySelector(selectorId);
+                    select.innerHTML = '';
+                    for (let h = 8; h <= 20; h++) {
+                        for (let m = 0; m < 60; m += 15) {
+                            if (h === 20 && m > 0) continue;
+                            const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                            const option = new Option(time, time);
+                            select.appendChild(option);
+                        }
+                    }
+                });
+            }
+            
+            function createCalendarGrid() {
+                timeLabelsContainer.innerHTML = '';
+                scheduleGridContainer.innerHTML = '';
+                dayHeadersContainer.innerHTML = '';
+
+                Object.values(daysMap).forEach(day => {
+                    const dayHeader = document.createElement('div');
+                    dayHeader.className = 'p-2 text-center font-semibold text-gray-300 border-b border-l border-gray-700';
+                    dayHeader.textContent = day;
+                    dayHeadersContainer.appendChild(dayHeader);
+                });
+
+                Object.values(daysMap).forEach((day, index) => {
+                    const dayCol = document.createElement('div');
+                    dayCol.id = `day-col-${index + 1}`;
+                    dayCol.className = 'border-l border-gray-700 relative';
+                    scheduleGridContainer.appendChild(dayCol);
+                });
+
+                for (let h = 8; h < 20; h++) {
+                    for (let m = 0; m < 60; m += 15) {
+                        const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                        const timeLabel = document.createElement('div');
+                        timeLabel.className = 'time-slot flex items-center justify-end';
+                        if (m === 0) {
+                        timeLabel.textContent = time;
+                        timeLabel.classList.add('font-medium');
+                        }
+                        timeLabelsContainer.appendChild(timeLabel);
+
+                        for (let d = 1; d <= 6; d++) {
+                            const slot = document.createElement('div');
+                            slot.className = 'time-slot border-b border-gray-700';
+                            if (m === 45) slot.className += ' border-b-2 border-gray-600';
+                            document.getElementById(`day-col-${d}`).appendChild(slot);
+                        }
+                    }
+                }
+                scheduleGridContainer.onscroll = () => timeLabelsContainer.scrollTop = scheduleGridContainer.scrollTop;
+            }
+
+            // --- Rendering Logic ---
+            function renderAll() {
+                renderBookings();
+                renderBlocksList();
+                renderRecurringList();
+            }
+
+            function renderBookings() {
+                document.querySelectorAll('.booking-item').forEach(el => el.remove());
+                const weekStart = currentMonday;
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekStart.getDate() + 6);
+
+                allBlocks.forEach(block => renderBookingItem(block, 'block-recurring'));
+                
+                singleEventBlocks.forEach(block => {
+                    const blockDate = new Date(block.date + 'T00:00:00');
+                    if (blockDate >= weekStart && blockDate <= weekEnd) {
+                        renderBookingItem(block, 'block-single');
+                    }
+                });
+                
+                recurringBookings.forEach(rec => {
+                    const recStartDate = new Date(rec.startDate + 'T00:00:00');
+                    if (currentMonday.getTime() >= getStartOfWeek(recStartDate).getTime()) {
+                        renderBookingItem(rec, 'recurring');
+                    }
+                });
+                
+                allBookings.forEach(booking => {
+                    const bookingDate = new Date(booking.date + 'T00:00:00');
+                    if (bookingDate >= weekStart && bookingDate <= weekEnd) {
+                        renderBookingItem(booking, 'booking');
+                    }
+                });
+            }
+            
+            function renderBookingItem(item, type) {
+                let dayOfWeek, celulaClass, titleText, deleteFn, message;
+                
+                switch(type) {
+                    case 'block-recurring':
+                        dayOfWeek = item.dayOfWeek;
+                        titleText = item.name;
+                        deleteFn = () => deleteBlock(item.id);
+                        message = `¿Eliminar bloqueo recurrente "${item.name}"?`;
+                        break;
+                    case 'block-single':
+                        dayOfWeek = (new Date(item.date + 'T00:00:00').getDay());
+                        titleText = item.name;
+                        deleteFn = () => deleteSingleEventBlock(item.id);
+                        message = `¿Eliminar bloqueo "${item.name}" del ${item.date}?`;
+                        break;
+                    case 'recurring':
+                        dayOfWeek = item.dayOfWeek;
+                        titleText = item.celula;
+                        deleteFn = () => deleteRecurringBooking(item.id);
+                        message = `¿Eliminar la reserva recurrente de ${item.celula}?`;
+                        break;
+                    case 'booking':
+                        dayOfWeek = (new Date(item.date + 'T00:00:00').getDay());
+                        titleText = item.celula;
+                        deleteFn = () => deleteBooking(item.id);
+                        message = `¿Eliminar la reserva de ${item.celula}?`;
+                        break;
+                }
+
+                let celulaNameForClass = '';
+                if (item.celula && typeof item.celula === 'string') {
+                    celulaNameForClass = normalizeForClass(item.celula);
+                }
+
+                celulaClass = (type === 'block-recurring' || type === 'block-single') 
+                    ? 'celula-bloqueado'
+                    : `celula-${celulaNameForClass}`;
+
+                if (dayOfWeek === 0 || dayOfWeek > 6) return;
+                const dayCol = document.getElementById(`day-col-${dayOfWeek}`);
+                if (!dayCol) return;
+
+                const startMinutes = timeToMinutes(item.startTime) - timeToMinutes('08:00');
+                const endMinutes = timeToMinutes(item.endTime) - timeToMinutes('08:00');
+                const duration = endMinutes - startMinutes;
+
+                const top = (startMinutes / 15) * 20;
+                const height = (duration / 15) * 20;
+
+                const bookingEl = document.createElement('div');
+                bookingEl.className = 'booking-item absolute w-full p-1 rounded-md border text-xs overflow-hidden shadow-lg';
+                bookingEl.style.top = `${top}px`;
+                bookingEl.style.height = `${height}px`;
+
+                bookingEl.classList.add(celulaClass);
+                
+                const title = document.createElement('strong');
+                title.className = 'font-bold';
+                title.textContent = titleText;
+                
+                const timeText = document.createElement('span');
+                timeText.textContent = ` ${item.startTime} - ${item.endTime}`;
+
+                dayCol.appendChild(bookingEl);
+                bookingEl.appendChild(title);
+                bookingEl.appendChild(timeText);
+
+                if(type === 'recurring' || type === 'block-recurring') {
+                    const recurringIcon = document.createElement('span');
+                    recurringIcon.textContent = ' ↻';
+                    recurringIcon.title = 'Este evento es recurrente';
+                    bookingEl.appendChild(recurringIcon);
+                }
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerHTML = '&times;';
+                deleteBtn.className = 'absolute top-0 right-1 font-bold hover:text-red-500';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    showConfirm(message, deleteFn);
+                };
+                bookingEl.appendChild(deleteBtn);
+            }
+
+            function renderFixedList(container, items, type) {
+                container.innerHTML = '';
+                const placeholder = type === 'block' ? 'No hay bloqueos recurrentes.' : 'No hay reservas recurrentes.';
+                if (items.length === 0) {
+                    container.innerHTML = `<p class="text-gray-500 text-sm">${placeholder}</p>`;
+                    return;
+                }
+
+                const sortedItems = [...items].sort((a, b) => {
+                    if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
+                    return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
+                });
+
+                sortedItems.forEach(item => {
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'flex justify-between items-center bg-gray-700 p-2 rounded-md text-sm';
+                    
+                    let text, deleteFn, message;
+
+                    if (type === 'block') {
+                        text = `${item.name} (${daysMap[item.dayOfWeek]} ${item.startTime}-${item.endTime})`;
+                        deleteFn = () => deleteBlock(item.id);
+                        message = `¿Eliminar bloqueo recurrente "${item.name}"?`;
+                    } else { // recurring
+                        text = `${item.celula} (${daysMap[item.dayOfWeek]} ${item.startTime}-${item.endTime})`;
+                        deleteFn = () => deleteRecurringBooking(item.id);
+                        message = `¿Eliminar reserva recurrente de ${item.celula}?`;
+                    }
+                    
+                    itemEl.innerHTML = `<span class="text-gray-200">${text}</span>`;
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.innerHTML = '&times;';
+                    deleteBtn.className = 'font-bold text-red-400 hover:text-red-300 px-2';
+                    deleteBtn.onclick = () => showConfirm(message, deleteFn);
+                    
+                    itemEl.appendChild(deleteBtn);
+                    container.appendChild(itemEl);
+                });
+            }
+            const renderBlocksList = () => renderFixedList(blocksListContainer, allBlocks, 'block');
+            const renderRecurringList = () => renderFixedList(recurringListContainer, recurringBookings, 'recurring');
+
+            // --- Core Logic ---
+            function checkRecurringConflict(dayOfWeek, startTime, endTime, excludeId = null) {
+                const startMinutes = timeToMinutes(startTime);
+                const endMinutes = timeToMinutes(endTime);
+
+                for (const block of allBlocks) {
+                    if(block.id === excludeId) continue;
+                    if (block.dayOfWeek === dayOfWeek) {
+                        const blockStart = timeToMinutes(block.startTime);
+                        const blockEnd = timeToMinutes(block.endTime);
+                        if (startMinutes < blockEnd && endMinutes > blockStart) {
+                            return `Conflicto con bloqueo recurrente "${block.name}".`;
+                        }
+                    }
+                }
+
+                for (const rec of recurringBookings) {
+                    if(rec.id === excludeId) continue;
+                    if (rec.dayOfWeek === dayOfWeek) {
+                        const recStart = timeToMinutes(rec.startTime);
+                        const recEnd = timeToMinutes(rec.endTime);
+                        if (startMinutes < recEnd && endMinutes > recStart) {
+                            return `Conflicto con reserva recurrente de ${rec.celula}.`;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            function isConflict(date, startTime, endTime, excludeId = null) {
+                const dateObj = new Date(date + 'T00:00:00');
+                const dayOfWeek = dateObj.getDay();
+                if(dayOfWeek === 0) return "No se pueden hacer reservas los domingos.";
+                
+                const recurringConflict = checkRecurringConflict(dayOfWeek, startTime, endTime);
+                if(recurringConflict) return recurringConflict;
+
+                const startMinutes = timeToMinutes(startTime);
+                const endMinutes = timeToMinutes(endTime);
+
+                for (const booking of allBookings) {
+                    if (booking.id === excludeId) continue;
+                    if (booking.date === date) {
+                        const bookingStart = timeToMinutes(booking.startTime);
+                        const bookingEnd = timeToMinutes(booking.endTime);
+                        if (startMinutes < bookingEnd && endMinutes > bookingStart) {
+                            return `Conflicto con una reserva de ${booking.celula}.`;
+                        }
+                    }
+                }
+                
+                for(const block of singleEventBlocks) {
+                    if(block.id === excludeId) continue;
+                    if(block.date === date) {
+                        const blockStart = timeToMinutes(block.startTime);
+                        const blockEnd = timeToMinutes(block.endTime);
+                        if (startMinutes < blockEnd && endMinutes > blockStart) {
+                            return `Conflicto con bloqueo "${block.name}" en esta fecha.`;
+                        }
+                    }
+                }
+
+                return false;
+            }
+
+            function addBooking() {
+                const celula = document.getElementById('celula').value;
+                const dayOfWeek = parseInt(document.getElementById('booking-day').value);
+                const startTime = document.getElementById('start-time').value;
+                const endTime = document.getElementById('end-time').value;
+                const isRecurring = document.getElementById('recurring').checked;
+                
+                const bookingTargetDate = new Date(currentMonday);
+                bookingTargetDate.setDate(currentMonday.getDate() + (dayOfWeek - 1));
+                const date = formatDate(bookingTargetDate);
+
+                if (timeToMinutes(startTime) >= timeToMinutes(endTime)) return showError("La hora de fin debe ser posterior a la hora de inicio.");
+                                
+                if (isRecurring) {
+                    const conflictMessage = checkRecurringConflict(dayOfWeek, startTime, endTime);
+                    if (conflictMessage) return showError(conflictMessage);
+                    recurringBookings.push({ id: Date.now(), celula, dayOfWeek, startTime, endTime, startDate: date });
+                    saveRecurringBookings();
+                } else {
+                    const conflictMessage = isConflict(date, startTime, endTime);
+                    if (conflictMessage) return showError(conflictMessage);
+                    allBookings.push({ id: Date.now(), celula, date, startTime, endTime });
+                    saveBookings();
+                }
+                renderAll();
+                document.getElementById('recurring').checked = false;
+            }
+
+            function addBlock() {
+                const name = document.getElementById('block-name').value.trim();
+                const dayOfWeek = parseInt(document.getElementById('block-day').value);
+                const startTime = document.getElementById('block-start-time').value;
+                const endTime = document.getElementById('block-end-time').value;
+                const isRecurring = document.getElementById('block-recurring').checked;
+                
+                if(!name) return showError("Por favor, introduce un nombre o motivo para el bloqueo.");
+                if (timeToMinutes(startTime) >= timeToMinutes(endTime)) return showError("La hora de fin debe ser posterior a la hora de inicio.");
+
+                if (isRecurring) {
+                    const conflictMessage = checkRecurringConflict(dayOfWeek, startTime, endTime);
+                    if (conflictMessage) return showError(conflictMessage);
+                    allBlocks.push({ id: Date.now(), name, dayOfWeek, startTime, endTime });
+                    saveBlocks();
+                } else {
+                    const blockDate = new Date(currentMonday);
+                    blockDate.setDate(currentMonday.getDate() + (dayOfWeek - 1));
+                    const dateStr = formatDate(blockDate);
+
+                    const conflictMessage = isConflict(dateStr, startTime, endTime);
+                    if(conflictMessage) return showError(conflictMessage);
+                    singleEventBlocks.push({ id: Date.now(), name, date: dateStr, startTime, endTime});
+                    saveSingleEventBlocks();
+                }
+
+                document.getElementById('block-name').value = '';
+                document.getElementById('block-recurring').checked = false;
+                renderAll();
+            }
+
+            function deleteBooking(id) {
+                allBookings = allBookings.filter(b => b.id !== id);
+                saveBookings();
+                renderAll();
+            }
+
+            function deleteBlock(id) { // Deletes recurring block
+                allBlocks = allBlocks.filter(b => b.id !== id);
+                saveBlocks();
+                renderAll();
+            }
+
+            function deleteSingleEventBlock(id) {
+                singleEventBlocks = singleEventBlocks.filter(b => b.id !== id);
+                saveSingleEventBlocks();
+                renderAll();
+            }
+
+            function deleteRecurringBooking(id) {
+                recurringBookings = recurringBookings.filter(r => r.id !== id);
+                saveRecurringBookings();
+                renderAll();
+            }
+            
+            function updateCalendarView() {
+                weekDisplay.textContent = formatWeekDisplay(currentMonday);
+                createCalendarGrid();
+                renderBookings();
+            }
+
+            // --- App Start ---
+            initFormOptions();
+            initTimePickers();
+            
+            document.getElementById('prev-week').addEventListener('click', () => {
+                currentMonday.setDate(currentMonday.getDate() - 7);
+                updateCalendarView();
+            });
+            document.getElementById('next-week').addEventListener('click', () => {
+                currentMonday.setDate(currentMonday.getDate() + 7);
+                updateCalendarView();
+            });
+            document.getElementById('add-booking').addEventListener('click', addBooking);
+            document.getElementById('add-block').addEventListener('click', addBlock);
+
+            loadData();
+            updateCalendarView();
+            renderBlocksList();
+            renderRecurringList();
+            loadingOverlay.classList.add('hidden');
+        });
+    </script>
+</body>
+</html>
+
