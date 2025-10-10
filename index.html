@@ -358,24 +358,28 @@
                 }
                 
                 for (let h = 8; h < 20; h++) {
-                    const timeLabel = document.createElement('div');
-                    timeLabel.className = 'time-slot flex items-center justify-end';
-                    if (h % 1 === 0) {
-                        timeLabel.textContent = `${String(h).padStart(2, '0')}:00`;
-                        timeLabel.classList.add('font-medium');
+                    for (let m = 0; m < 60; m += 15) {
+                        const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                        const timeLabel = document.createElement('div');
+                        timeLabel.className = 'time-slot flex items-center justify-end text-xs';
+                        if (m === 0) {
+                            timeLabel.textContent = time;
+                            timeLabel.classList.add('font-medium', 'text-sm');
+                        } else {
+                        timeLabel.textContent = `:${String(m).padStart(2, '0')}`;
+                        timeLabel.classList.add('text-gray-500');
+                        }
+                        timeLabelsContainer.appendChild(timeLabel);
+
+                        for (let d = 1; d <= 6; d++) {
+                            const slot = document.createElement('div');
+                            slot.className = 'time-slot border-b border-gray-700';
+                            if (m === 45) {
+                                slot.classList.add('border-b-2', 'border-gray-600');
+                            }
+                            document.getElementById(`day-col-${d}`).appendChild(slot);
+                        }
                     }
-                    timeLabelsContainer.appendChild(timeLabel);
-                    
-                    const timeSlotsContainer = document.createElement('div');
-                    timeSlotsContainer.className = 'h-20';
-                    for(let m = 0; m < 4; m++) {
-                        const slot = document.createElement('div');
-                        slot.className = 'h-5 border-b border-gray-700';
-                        if (m === 3) slot.classList.add('border-b-2', 'border-gray-600');
-                        timeSlotsContainer.appendChild(slot);
-                    }
-                    
-                    document.querySelectorAll('.day-column').forEach(col => col.appendChild(timeSlotsContainer.cloneNode(true)));
                 }
                 scheduleGridContainer.onscroll = () => timeLabelsContainer.scrollTop = scheduleGridContainer.scrollTop;
             }
@@ -390,14 +394,10 @@
 
             function updateDayVisibility() {
                 document.querySelectorAll('.day-column').forEach((col, index) => {
-                    // Reset classes to a clean state
                     col.classList.remove('block', 'hidden', 'md:block');
-
                     if (index === mobileDayIndex) {
-                        // The active mobile day is always visible
                         col.classList.add('block');
                     } else {
-                        // Other days are hidden on mobile, but visible on desktop
                         col.classList.add('hidden', 'md:block');
                     }
                 });
@@ -535,18 +535,53 @@
                 const endMins = timeToMinutes(endTime);
 
                 const checkOverlap = (itemStart, itemEnd) => startMins < itemEnd && endMins > itemStart;
-                const weekStart = getStartOfWeek(dateObj);
+                const weekStart = getStartOfWeek(dateObj).getTime();
 
                 for (const block of allBlocks) {
-                    const blockStartDate = new Date(block.startDate + 'T00:00:00');
-                    if (block.dayOfWeek === dayOfWeek && weekStart.getTime() >= getStartOfWeek(blockStartDate).getTime() && checkOverlap(timeToMinutes(block.startTime), timeToMinutes(block.endTime))) return `Conflicto con bloqueo recurrente "${block.name}".`;
+                    const blockStartDate = getStartOfWeek(new Date(block.startDate + 'T00:00:00')).getTime();
+                    if (block.dayOfWeek === dayOfWeek && weekStart >= blockStartDate && checkOverlap(timeToMinutes(block.startTime), timeToMinutes(block.endTime))) return `Conflicto con bloqueo recurrente "${block.name}".`;
                 }
                 for (const rec of recurringBookings) {
-                    const recStartDate = new Date(rec.startDate + 'T00:00:00');
-                    if (rec.dayOfWeek === dayOfWeek && weekStart.getTime() >= getStartOfWeek(recStartDate).getTime() && checkOverlap(timeToMinutes(rec.startTime), timeToMinutes(rec.endTime))) return `Conflicto con reserva recurrente de ${rec.celula}.`;
+                    const recStartDate = getStartOfWeek(new Date(rec.startDate + 'T00:00:00')).getTime();
+                    if (rec.dayOfWeek === dayOfWeek && weekStart >= recStartDate && checkOverlap(timeToMinutes(rec.startTime), timeToMinutes(rec.endTime))) return `Conflicto con reserva recurrente de ${rec.celula}.`;
                 }
                 for (const booking of allBookings) if (booking.date === dateStr && checkOverlap(timeToMinutes(booking.startTime), timeToMinutes(booking.endTime))) return `Conflicto con una reserva de ${booking.celula}.`;
                 for (const block of singleEventBlocks) if (block.date === dateStr && checkOverlap(timeToMinutes(block.startTime), timeToMinutes(block.endTime))) return `Conflicto con bloqueo "${block.name}".`;
+                
+                return false;
+            }
+
+            function checkRecurringConflict(dayOfWeek, startTime, endTime, startDateStr) {
+                const startMins = timeToMinutes(startTime);
+                const endMins = timeToMinutes(endTime);
+                const checkOverlap = (itemStart, itemEnd) => startMins < itemEnd && endMins > itemStart;
+                const startDateObj = new Date(startDateStr + 'T00:00:00');
+
+                // 1. Check against other RECURRING events
+                for (const rec of recurringBookings) {
+                    if (rec.dayOfWeek === dayOfWeek && checkOverlap(timeToMinutes(rec.startTime), timeToMinutes(rec.endTime))) {
+                        return `Conflicto con la reserva recurrente de ${rec.celula}.`;
+                    }
+                }
+                for (const block of allBlocks) {
+                    if (block.dayOfWeek === dayOfWeek && checkOverlap(timeToMinutes(block.startTime), timeToMinutes(block.endTime))) {
+                        return `Conflicto con el bloqueo recurrente "${block.name}".`;
+                    }
+                }
+
+                // 2. Check against all future SINGLE events
+                for (const booking of allBookings) {
+                    const bookingDate = new Date(booking.date + 'T00:00:00');
+                    if (bookingDate.getDay() === dayOfWeek && bookingDate >= startDateObj && checkOverlap(timeToMinutes(booking.startTime), timeToMinutes(booking.endTime))) {
+                        return `Conflicto con una reserva de ${booking.celula} el día ${booking.date}.`;
+                    }
+                }
+                for (const block of singleEventBlocks) {
+                    const blockDate = new Date(block.date + 'T00:00:00');
+                    if (blockDate.getDay() === dayOfWeek && blockDate >= startDateObj && checkOverlap(timeToMinutes(block.startTime), timeToMinutes(block.endTime))) {
+                        return `Conflicto con el bloqueo "${block.name}" el día ${block.date}.`;
+                    }
+                }
                 return false;
             }
 
@@ -563,12 +598,13 @@
 
                 if (timeToMinutes(startTime) >= timeToMinutes(endTime)) return showError("La hora de fin debe ser posterior a la hora de inicio.");
                 
-                const conflict = isConflict(date, startTime, endTime);
-                if (conflict) return showError(conflict);
-                                
                 if (isRecurring) {
+                    const conflict = checkRecurringConflict(dayOfWeek, startTime, endTime, date);
+                    if (conflict) return showError(conflict);
                     recurringBookings.push({ id: Date.now(), celula, dayOfWeek, startTime, endTime, startDate: date });
                 } else {
+                    const conflict = isConflict(date, startTime, endTime);
+                    if (conflict) return showError(conflict);
                     allBookings.push({ id: Date.now(), celula, date, startTime, endTime });
                 }
                 saveData();
@@ -590,12 +626,13 @@
                 blockDate.setDate(currentMonday.getDate() + (dayOfWeek - 1));
                 const dateStr = formatDate(blockDate);
                 
-                const conflict = isConflict(dateStr, startTime, endTime);
-                if (conflict) return showError(conflict);
-
                 if (isRecurring) {
+                    const conflict = checkRecurringConflict(dayOfWeek, startTime, endTime, dateStr);
+                    if (conflict) return showError(conflict);
                     allBlocks.push({ id: Date.now(), name, dayOfWeek, startTime, endTime, startDate: dateStr });
                 } else {
+                    const conflict = isConflict(dateStr, startTime, endTime);
+                    if (conflict) return showError(conflict);
                     singleEventBlocks.push({ id: Date.now(), name, date: dateStr, startTime, endTime});
                 }
                 saveData();
