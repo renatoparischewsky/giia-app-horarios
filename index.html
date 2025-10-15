@@ -28,6 +28,10 @@
         .calendar-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; } /* gray-600 */
         .calendar-scroll::-webkit-scrollbar-thumb:hover { background: #6b7280; } /* gray-500 */
 
+        /* Ocultar scrollbars visualmente pero permitir scroll programático */
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+
         /* Dark mode for form elements */
         .form-input-dark {
             background-color: #374151; /* gray-700 */
@@ -47,9 +51,9 @@
         }
     </style>
 </head>
-<body class="p-4 md:p-6">
+<body class="p-2 md:p-4">
 
-    <div id="app" class="max-w-7xl mx-auto">
+    <div id="app" class="max-w-full mx-auto px-2">
         <header class="text-center mb-8 flex items-center justify-center gap-4">
             <svg width="48" height="48" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo GIIA">
                 <defs>
@@ -189,16 +193,16 @@
                 </div>
             </div>
 
-            <div id="calendar" class="grid grid-cols-[auto_1fr] h-[60vh] overflow-hidden">
-                <div id="time-labels" class="pr-2 text-right text-sm text-gray-400 overflow-y-auto calendar-scroll"></div>
-                <div id="schedule-grid-container" class="grid grid-cols-1 md:grid-cols-6 relative overflow-y-auto calendar-scroll">
+            <div id="calendar" class="grid grid-cols-[auto_1fr] overflow-hidden">
+                <div id="time-labels" class="pr-2 text-right text-sm text-gray-400"></div>
+                <div id="schedule-grid-container" class="grid grid-cols-1 md:grid-cols-6 relative">
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             // --- App State ---
             let allBookings = [];
             let recurringBookings = [];
@@ -381,7 +385,7 @@
                         }
                     }
                 }
-                scheduleGridContainer.onscroll = () => timeLabelsContainer.scrollTop = scheduleGridContainer.scrollTop;
+                // Sin scroll interno - todo visible con scroll de página
             }
 
             // --- Rendering Logic ---
@@ -417,27 +421,90 @@
                         case 'block-recurring':
                             dayOfWeek = item.dayOfWeek;
                             titleText = item.name;
-                            deleteFn = () => { allBlocks = allBlocks.filter(b => b.id !== item.id); saveData(); renderAll(); };
+                            deleteFn = async () => {
+                                try {
+                                    await sendWebhook(buildBlockPayload('Eliminar', item, true));
+                                    allBlocks = allBlocks.filter(b => b.id !== item.id);
+                                    saveData();
+                                    renderAll();
+                                } catch (error) {
+                                    showError(`Error al eliminar el bloqueo: ${error.message}`);
+                                }
+                            };
                             message = `¿Eliminar bloqueo recurrente "${item.name}"?`;
                             break;
                         case 'block-single':
                             dayOfWeek = (new Date(item.date + 'T00:00:00').getDay());
                             titleText = item.name;
-                            deleteFn = () => { singleEventBlocks = singleEventBlocks.filter(b => b.id !== item.id); saveData(); renderAll(); };
+                            deleteFn = async () => {
+                                try {
+                                    await sendWebhook(buildBlockPayload('Eliminar', item, false));
+                                    singleEventBlocks = singleEventBlocks.filter(b => b.id !== item.id);
+                                    saveData();
+                                    renderAll();
+                                } catch (error) {
+                                    showError(`Error al eliminar el bloqueo: ${error.message}`);
+                                }
+                            };
                             message = `¿Eliminar bloqueo "${item.name}" del ${item.date}?`;
                             break;
                         case 'recurring':
                             dayOfWeek = item.dayOfWeek;
                             titleText = item.celula;
                             celulaClass = `celula-${normalizeForClass(item.celula)}`;
-                            deleteFn = () => { recurringBookings = recurringBookings.filter(r => r.id !== item.id); saveData(); renderAll(); };
+                            deleteFn = async () => {
+                                try {
+                                    await sendWebhook({
+                                        event_type: 'Eliminar',
+                                        title: item.celula,
+                                        start_time: item.startTime,
+                                        end_time: item.endTime,
+                                        date: item.date,
+                                        is_repeating: true,
+                                        day_of_week: item.dayOfWeek,
+                                        created_by: 'UI',
+                                        id: item.id
+                                    });
+                                    recurringBookings = recurringBookings.filter(r => r.id !== item.id);
+                                    saveData();
+                                    renderAll();
+                                } catch (error) {
+                                    showError(`Error al eliminar la reserva: ${error.message}`);
+                                }
+                            };
                             message = `¿Eliminar la reserva recurrente de ${item.celula}?`;
                             break;
                         case 'booking':
                             dayOfWeek = (new Date(item.date + 'T00:00:00').getDay());
                             titleText = item.celula;
                             celulaClass = `celula-${normalizeForClass(item.celula)}`;
-                            deleteFn = () => { allBookings = allBookings.filter(b => b.id !== item.id); saveData(); renderAll(); };
+                            deleteFn = async () => {
+                                try {
+                                    // Extraer fecha simple del timestamp para calcular día de la semana
+                                    let dateStr = item.date;
+                                    if (item.date.includes('T')) {
+                                        dateStr = item.date.split('T')[0];
+                                    }
+                                    const dayOfWeek = (new Date(dateStr + 'T00:00:00').getDay());
+                                    
+                                    await sendWebhook({
+                                        event_type: 'Eliminar',
+                                        title: item.celula,
+                                        start_time: item.startTime,
+                                        end_time: item.endTime,
+                                        date: item.date,
+                                        is_repeating: false,
+                                        day_of_week: dayOfWeek === 0 ? null : dayOfWeek,
+                                        created_by: 'UI',
+                                        id: item.id
+                                    });
+                                    allBookings = allBookings.filter(b => b.id !== item.id);
+                                    saveData();
+                                    renderAll();
+                                } catch (error) {
+                                    showError(`Error al eliminar la reserva: ${error.message}`);
+                                }
+                            };
                             message = `¿Eliminar la reserva de ${item.celula}?`;
                             break;
                     }
@@ -509,9 +576,24 @@
                     itemEl.className = 'flex justify-between items-center bg-gray-700 p-2 rounded-md text-sm';
                     const text = (type === 'block' ? item.name : item.celula) + ` (${daysMap[item.dayOfWeek]} ${item.startTime}-${item.endTime})`;
                     const message = `¿Eliminar ${(type === 'block' ? 'bloqueo' : 'reserva')} recurrente "${type === 'block' ? item.name : item.celula}"?`;
-                    const deleteFn = () => {
-                        if (type === 'block') allBlocks = allBlocks.filter(b => b.id !== item.id);
-                        else recurringBookings = recurringBookings.filter(r => r.id !== item.id);
+                    const deleteFn = async () => {
+                        if (type === 'block') {
+                            await sendWebhook(buildBlockPayload('Eliminar', item, true));
+                            allBlocks = allBlocks.filter(b => b.id !== item.id);
+                        } else {
+                            await sendWebhook({
+                                event_type: 'Eliminar',
+                                title: item.celula,
+                                start_time: item.startTime,
+                                end_time: item.endTime,
+                                date: item.date,
+                                is_repeating: true,
+                                day_of_week: item.dayOfWeek,
+                                created_by: 'UI',
+                                id: item.id
+                            });
+                            recurringBookings = recurringBookings.filter(r => r.id !== item.id);
+                        }
                         saveData();
                         renderAll();
                     };
@@ -527,7 +609,300 @@
             const renderBlocksList = () => renderFixedList(blocksListContainer, allBlocks, 'block');
             const renderRecurringList = () => renderFixedList(recurringListContainer, recurringBookings, 'recurring');
 
+            // --- Time Formatting Functions ---
+            
+            // Función para generar ID único
+            function generateUniqueId() {
+                return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+            }
+
+            // --- Webhook Integration ---
+            async function sendWebhook(data, maxRetries = 3) {
+                for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                    try {
+                        console.log(`Enviando webhook (intento ${attempt}/${maxRetries}):`, data);
+                        
+                        const response = await fetch('https://n8n-58ow.onrender.com/webhook/63da830a-da3d-466d-bf6d-e08b95928527', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(data)
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const result = await response.json();
+                        console.log('Webhook response:', result);
+                        return result; // Éxito, salir del bucle
+                        
+                    } catch (error) {
+                        console.warn(`Webhook error (intento ${attempt}/${maxRetries}):`, error);
+                        
+                        if (attempt === maxRetries) {
+                            // Último intento falló
+                            throw new Error(`No se pudo enviar al servidor después de ${maxRetries} intentos: ${error.message}`);
+                        }
+                        
+                        // Esperar antes del siguiente intento (backoff exponencial)
+                        const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+                        console.log(`Esperando ${delay}ms antes del siguiente intento...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                }
+            }
+
+            function buildBookingPayload(eventType, booking, isRecurring) {
+                // Calcular day_of_week (1-6 para lunes-sábado)
+                let dayOfWeek = null;
+                if (booking.date) {
+                    let dateStr = booking.date;
+                    if (booking.date.includes('T')) {
+                        dateStr = booking.date.split('T')[0];
+                    }
+                    const d = new Date(dateStr + 'T00:00:00').getDay();
+                    dayOfWeek = d === 0 ? null : d; // 1-6 (L-S), null si Domingo
+                } else if (isRecurring) {
+                    dayOfWeek = booking.dayOfWeek ?? null;
+                }
+                
+                return {
+                    event_type: eventType,
+                    title: booking.celula,
+                    start_time: booking.startTime,
+                    end_time: booking.endTime,
+                    date: booking.date,
+                    is_repeating: !!isRecurring,
+                    day_of_week: dayOfWeek,
+                    created_by: 'UI',
+                    id: booking.id
+                };
+            }
+
+            function buildBlockPayload(eventType, block, isRecurring) {
+                // Calcular day_of_week (1-6 para lunes-sábado)
+                let dayOfWeek = null;
+                if (block.date) {
+                    let dateStr = block.date;
+                    if (block.date.includes('T')) {
+                        dateStr = block.date.split('T')[0];
+                    }
+                    const d = new Date(dateStr + 'T00:00:00').getDay();
+                    dayOfWeek = d === 0 ? null : d; // 1-6 (L-S), null si Domingo
+                } else if (isRecurring) {
+                    dayOfWeek = block.dayOfWeek ?? null;
+                }
+                
+                return {
+                    event_type: eventType,
+                    title: block.name,
+                    start_time: block.startTime,
+                    end_time: block.endTime,
+                    date: block.date,
+                    is_repeating: !!isRecurring,
+                    day_of_week: dayOfWeek,
+                    created_by: 'UI',
+                    id: block.id
+                };
+            }
+
             // --- Core Logic ---
+            
+            // Función para sincronizar datos periódicamente
+            async function syncData() {
+                try {
+                    const res = await fetch('https://n8n-58ow.onrender.com/webhook/71cdeac2-101d-4fe8-b8a5-d1d2760f94cc', { 
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (res.ok) {
+                        const payload = await res.json();
+                        console.log('Sincronización automática:', payload);
+                        applyServerEvents(payload);
+                    }
+                } catch (e) {
+                    console.warn('Error en sincronización automática:', e);
+                }
+            }
+            
+            // Sincronizar cada 30 segundos
+            setInterval(syncData, 30000);
+            
+            async function fetchInitialData() {
+                try {
+                    // GET para obtener datos de la base de datos
+                    const res = await fetch('https://n8n-58ow.onrender.com/webhook/71cdeac2-101d-4fe8-b8a5-d1d2760f94cc', { 
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (!res.ok) throw new Error('GET failed');
+                    const payload = await res.json();
+                    console.log('Datos recibidos del servidor:', payload);
+                    applyServerEvents(payload);
+                } catch (e) {
+                    console.error('Error crítico: No se pudieron cargar datos del servidor:', e);
+                    // Mostrar error al usuario y no continuar
+                    alert('Error: No se pudieron cargar los datos del servidor. Por favor, recarga la página.');
+                    throw e; // Re-lanzar el error para detener la ejecución
+                }
+            }
+
+            function applyServerEvents(serverData) {
+                // Limpiar datos locales antes de aplicar datos del servidor
+                allBookings = [];
+                recurringBookings = [];
+                allBlocks = [];
+                singleEventBlocks = [];
+                
+                // Espera una lista de eventos con el mismo esquema de payload
+                if (!serverData) return;
+                const events = Array.isArray(serverData) ? serverData : (serverData.events || []);
+                if (!Array.isArray(events)) return;
+
+                // Función simple para procesar tiempo sin conversiones
+                const parseTime = (timeStr) => {
+                    if (!timeStr) return null;
+                    
+                    // Si ya es formato HH:MM, devolver tal como está
+                    if (/^\d{2}:\d{2}$/.test(timeStr)) {
+                        return timeStr;
+                    }
+                    
+                    // Si es un timestamp completo, extraer solo la hora
+                    if (timeStr.includes('T')) {
+                        const timePart = timeStr.split('T')[1];
+                        if (timePart) {
+                            return timePart.substring(0, 5); // HH:MM
+                        }
+                    }
+                    
+                    // Devolver tal como está si no coincide con patrones conocidos
+                    return timeStr;
+                };
+
+                const parseDate = (dateStr) => {
+                    if (!dateStr) return null;
+                    try {
+                        console.log('=== PROCESAMIENTO DE FECHA ===');
+                        console.log('Fecha recibida:', dateStr);
+                        
+                        // Devolver tal como viene, sin conversiones
+                        console.log('Devolviendo fecha original:', dateStr);
+                        return dateStr;
+                    } catch (e) {
+                        console.warn('Error parsing date:', dateStr, e);
+                        return dateStr; // Devolver el valor original si hay error
+                    }
+                };
+
+                const toIsoDate = (input) => {
+                    if (!input || typeof input !== 'string') return null;
+                    // Ya en ISO YYYY-MM-DD
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(input)) return input;
+                    // DD/MM/YYYY o DD-MM-YYYY
+                    const m = input.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                    if (m) {
+                        const d = String(m[1]).padStart(2,'0');
+                        const mo = String(m[2]).padStart(2,'0');
+                        const y = m[3];
+                        return `${y}-${mo}-${d}`;
+                    }
+                    // Intento final con Date.parse
+                    const dt = new Date(input);
+                    if (!isNaN(dt.getTime())) {
+                        const y = dt.getFullYear();
+                        const mo = String(dt.getMonth()+1).padStart(2,'0');
+                        const d = String(dt.getDate()).padStart(2,'0');
+                        return `${y}-${mo}-${d}`;
+                    }
+                    return null;
+                };
+
+                allBookings = [];
+                recurringBookings = [];
+                allBlocks = [];
+                singleEventBlocks = [];
+
+                for (const ev of events) {
+                    const isRepeating = !!ev.is_repeating;
+                    
+                    // Procesar fechas sin conversiones
+                    const dateValue = parseDate(ev.date) || toIsoDate(ev.date);
+                    const startDateValue = parseDate(ev.start_date) || toIsoDate(ev.start_date);
+                    const endDateValue = parseDate(ev.end_date) || toIsoDate(ev.end_date);
+                    
+                    // Extraer fecha simple para cálculos de día de la semana
+                    let dateIso = null;
+                    if (dateValue) {
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+                            dateIso = dateValue;
+                        } else {
+                            // Extraer fecha de timestamp completo
+                            dateIso = dateValue.split('T')[0];
+                        }
+                    }
+                    
+                    let dayOfWeek = ev.day_of_week ?? null; // 1-6 para recurrentes
+                    if (!dayOfWeek && dateIso) {
+                        const d = new Date(dateIso + 'T00:00:00').getDay();
+                        dayOfWeek = d === 0 ? null : d;
+                    }
+                    
+                    // Procesar horas sin conversiones de zona horaria
+                    const startTime = parseTime(ev.start_time);
+                    const endTime = parseTime(ev.end_time);
+                    
+                    const base = {
+                        id: ev.id ?? Date.now() + Math.floor(Math.random() * 1000),
+                        startTime: startTime,
+                        endTime: endTime,
+                    };
+
+                    if (ev.event_type === 'Reserva') {
+                        if (isRepeating && dayOfWeek) {
+                            recurringBookings.push({
+                                ...base,
+                                celula: ev.title,
+                                dayOfWeek,
+                                date: dateValue,
+                                startDate: startDateValue || dateValue,
+                                endDate: endDateValue
+                            });
+                        } else {
+                            allBookings.push({
+                                ...base,
+                                celula: ev.title,
+                                date: dateValue,
+                                startDate: startDateValue,
+                                endDate: endDateValue
+                            });
+                        }
+                    } else if (ev.event_type === 'Bloqueo') {
+                        if (isRepeating && dayOfWeek) {
+                            allBlocks.push({
+                                ...base,
+                                name: ev.title,
+                                dayOfWeek,
+                                date: dateValue,
+                                startDate: startDateValue || dateValue,
+                                endDate: endDateValue
+                            });
+                        } else {
+                            singleEventBlocks.push({
+                                ...base,
+                                name: ev.title,
+                                date: dateValue,
+                                startDate: startDateValue,
+                                endDate: endDateValue
+                            });
+                        }
+                    }
+                }
+                saveData();
+                renderAll();
+            }
             function isConflict(dateStr, startTime, endTime) {
                 const dateObj = new Date(dateStr + 'T00:00:00');
                 const dayOfWeek = dateObj.getDay();
@@ -585,7 +960,7 @@
                 return false;
             }
 
-            function addBooking() {
+            async function addBooking() {
                 const celula = document.getElementById('celula').value;
                 const dayOfWeek = parseInt(document.getElementById('booking-day').value);
                 const startTime = document.getElementById('start-time').value;
@@ -598,21 +973,39 @@
 
                 if (timeToMinutes(startTime) >= timeToMinutes(endTime)) return showError("La hora de fin debe ser posterior a la hora de inicio.");
                 
+                let newBooking;
                 if (isRecurring) {
                     const conflict = checkRecurringConflict(dayOfWeek, startTime, endTime, date);
                     if (conflict) return showError(conflict);
-                    recurringBookings.push({ id: Date.now(), celula, dayOfWeek, startTime, endTime, startDate: date });
+                    newBooking = { id: generateUniqueId(), celula, dayOfWeek, startTime, endTime, date: date, startDate: date };
+                    recurringBookings.push(newBooking);
                 } else {
                     const conflict = isConflict(date, startTime, endTime);
                     if (conflict) return showError(conflict);
-                    allBookings.push({ id: Date.now(), celula, date, startTime, endTime });
+                    newBooking = { id: generateUniqueId(), celula, date, startTime, endTime };
+                    allBookings.push(newBooking);
                 }
-                saveData();
-                renderAll();
-                document.getElementById('recurring').checked = false;
+                
+                try {
+                    // Enviar webhook (Reserva)
+                    await sendWebhook(buildBookingPayload('Reserva', newBooking, isRecurring));
+                    
+                    saveData();
+                    renderAll();
+                    document.getElementById('recurring').checked = false;
+                } catch (error) {
+                    // Si falla el webhook, revertir la operación local
+                    if (isRecurring) {
+                        recurringBookings = recurringBookings.filter(b => b.id !== newBooking.id);
+                    } else {
+                        allBookings = allBookings.filter(b => b.id !== newBooking.id);
+                    }
+                    showError(`Error al guardar la reserva: ${error.message}`);
+                    renderAll();
+                }
             }
 
-            function addBlock() {
+            async function addBlock() {
                 const name = document.getElementById('block-name').value.trim();
                 const dayOfWeek = parseInt(document.getElementById('block-day').value);
                 const startTime = document.getElementById('block-start-time').value;
@@ -626,19 +1019,37 @@
                 blockDate.setDate(currentMonday.getDate() + (dayOfWeek - 1));
                 const dateStr = formatDate(blockDate);
                 
+                let newBlock;
                 if (isRecurring) {
                     const conflict = checkRecurringConflict(dayOfWeek, startTime, endTime, dateStr);
                     if (conflict) return showError(conflict);
-                    allBlocks.push({ id: Date.now(), name, dayOfWeek, startTime, endTime, startDate: dateStr });
+                    newBlock = { id: generateUniqueId(), name, dayOfWeek, startTime, endTime, date: dateStr, startDate: dateStr };
+                    allBlocks.push(newBlock);
                 } else {
                     const conflict = isConflict(dateStr, startTime, endTime);
                     if (conflict) return showError(conflict);
-                    singleEventBlocks.push({ id: Date.now(), name, date: dateStr, startTime, endTime});
+                    newBlock = { id: generateUniqueId(), name, date: dateStr, startTime, endTime };
+                    singleEventBlocks.push(newBlock);
                 }
-                saveData();
-                document.getElementById('block-name').value = '';
-                document.getElementById('block-recurring').checked = false;
-                renderAll();
+                
+                try {
+                    // Enviar webhook (Bloqueo)
+                    await sendWebhook(buildBlockPayload('Bloqueo', newBlock, isRecurring));
+                    
+                    saveData();
+                    document.getElementById('block-name').value = '';
+                    document.getElementById('block-recurring').checked = false;
+                    renderAll();
+                } catch (error) {
+                    // Si falla el webhook, revertir la operación local
+                    if (isRecurring) {
+                        allBlocks = allBlocks.filter(b => b.id !== newBlock.id);
+                    } else {
+                        singleEventBlocks = singleEventBlocks.filter(b => b.id !== newBlock.id);
+                    }
+                    showError(`Error al guardar el bloqueo: ${error.message}`);
+                    renderAll();
+                }
             }
 
             function updateCalendarView() {
@@ -660,7 +1071,8 @@
             document.getElementById('add-booking').addEventListener('click', addBooking);
             document.getElementById('add-block').addEventListener('click', addBlock);
 
-            loadData();
+            // NO cargar datos locales primero - esperar datos del servidor
+            await fetchInitialData();
             updateCalendarView();
             loadingOverlay.classList.add('hidden');
         });

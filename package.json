@@ -1,0 +1,24 @@
+{
+  "name": "gii-app-horarios",
+  "version": "1.0.0",
+  "description": "Aplicación de horarios para Sala Andes - GIIA",
+  "main": "index.html",
+  "scripts": {
+    "dev": "live-server --port=3000 --open=/index.html",
+    "start": "live-server --port=3000 --open=/index.html",
+    "build": "echo 'No build process needed for static HTML'",
+    "serve": "live-server --port=3000"
+  },
+  "keywords": [
+    "horarios",
+    "reservas",
+    "gii",
+    "sala-andes"
+  ],
+  "author": "GIIA",
+  "license": "MIT",
+  "devDependencies": {
+    "live-server": "^1.2.2"
+  }
+}
+
