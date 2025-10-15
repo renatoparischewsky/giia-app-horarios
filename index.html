@@ -737,15 +737,16 @@
                         method: 'GET',
                         headers: { 'Content-Type': 'application/json' }
                     });
-                    if (!res.ok) throw new Error('GET failed');
-                    const payload = await res.json();
-                    console.log('Datos recibidos del servidor:', payload);
-                    applyServerEvents(payload);
+                    if (res.ok) {
+                        const payload = await res.json();
+                        console.log('Datos recibidos del servidor:', payload);
+                        applyServerEvents(payload);
+                    } else {
+                        console.warn('El servidor no devolvió datos válidos, continuando con página vacía');
+                    }
                 } catch (e) {
-                    console.error('Error crítico: No se pudieron cargar datos del servidor:', e);
-                    // Mostrar error al usuario y no continuar
-                    alert('Error: No se pudieron cargar los datos del servidor. Por favor, recarga la página.');
-                    throw e; // Re-lanzar el error para detener la ejecución
+                    console.warn('No se pudieron cargar datos del servidor, continuando con página vacía:', e);
+                    // Continuar sin datos del servidor
                 }
             }
 
